@@ -1,36 +1,63 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Sidequest
 
-## Getting Started
+Sidequest is an AI learning interface being developed to help learners explore conversational tangents without losing their place. The intended experience keeps a primary learning thread and lets users branch from a concept or message into a separate conversation, then return to the parent thread.
 
-First, run the development server:
+## Current status
+
+Early frontend foundation. The application currently renders the default Next.js starter page; the Sidequest learning experience is not implemented yet.
+
+Current capabilities are limited to:
+
+- A single starter page at `/` with framework resource links and logos.
+- A shared HTML layout, Geist font configuration, and starter metadata.
+- Responsive starter styling and system-preference light/dark colors.
+
+There is no conversation UI, sidequest creation, return-to-thread behavior, AI integration, authentication, or persistence.
+
+## Stack
+
+Next.js 16.3.6 (App Router), React 19.2.8, TypeScript 5, Tailwind CSS 4, and ESLint 9. Dependencies are locked in `package-lock.json`.
+
+## Local development
+
+Use Node.js 20.9 or newer and npm. From the repository root:
 
 ```bash
+npm ci
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [localhost:3000](http://localhost:3000). Edit `app/page.tsx` to work on the homepage. No application environment variables or external services are currently required. The layout uses `next/font/google`, which fetches fonts during builds and may require network access.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Available checks and production commands:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run lint
+npm run build
+npm run start # Run after a successful build
+```
 
-## Learn More
+There is no test script or CI configuration yet.
 
-To learn more about Next.js, take a look at the following resources:
+## Repository structure
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```text
+app/                 Route, root layout, global styles, and favicon
+public/              Starter SVG assets
+docs/               Canonical project documentation
+AGENTS.md            Agent workflow guidance and managed Next.js rules
+CLAUDE.md            Reference to AGENTS.md
+package.json         Dependencies and npm scripts
+package-lock.json    Locked dependency tree
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Framework and tooling configuration lives in `next.config.ts`, `tsconfig.json`, `eslint.config.mjs`, and `postcss.config.mjs`.
 
-## Deploy on Vercel
+## Project documentation
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- [Product](docs/PRODUCT.md): problem, intended experience, scope, and non-goals.
+- [Architecture](docs/ARCHITECTURE.md): current implementation and future possibilities.
+- [Roadmap](docs/ROADMAP.md): milestone status and next steps.
+- [Decisions](docs/DECISIONS.md): lightweight decision log.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Keep changes scoped, run applicable checks, and update the relevant docs when behavior or direction changes. Detailed implementation tasks belong in GitHub Issues.
