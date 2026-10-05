@@ -1,63 +1,75 @@
 # Sidequest
 
-Sidequest is an AI learning interface being developed to help learners explore conversational tangents without losing their place. The intended experience keeps a primary learning thread and lets users branch from a concept or message into a separate conversation, then return to the parent thread.
+Sidequest is a branch-native AI conversation interface for exploring tangents without losing the original thread. A question can continue the current conversation or create a nested sidequest anchored to an exact message or selected passage.
 
-## Current status
+## Current capabilities
 
-Early frontend foundation. The application currently renders the default Next.js starter page; the Sidequest learning experience is not implemented yet.
+- Familiar chat interface with Markdown assistant responses.
+- Root conversations and arbitrarily nested sidequests.
+- Exact parent-conversation and parent-message provenance.
+- Selected-text references for normal questions or new branches.
+- Bounded ancestor context that excludes messages added after a branch point.
+- PostgreSQL/Supabase persistence for graphs, ordered messages, references, and generation lifecycle records.
+- Anonymous browser ownership through an HttpOnly cookie; no account system yet.
+- OpenAI Responses API integration using `gpt-5.6`.
 
-Current capabilities are limited to:
-
-- A single starter page at `/` with framework resource links and logos.
-- A shared HTML layout, Geist font configuration, and starter metadata.
-- Responsive starter styling and system-preference light/dark colors.
-
-There is no conversation UI, sidequest creation, return-to-thread behavior, AI integration, authentication, or persistence.
+See [Product](docs/PRODUCT.md), [Architecture](docs/ARCHITECTURE.md), [Decisions](docs/DECISIONS.md), and [Research](docs/RESEARCH.md).
 
 ## Stack
 
-Next.js 16.3.6 (App Router), React 19.2.8, TypeScript 5, Tailwind CSS 4, and ESLint 9. Dependencies are locked in `package-lock.json`.
+Next.js 16.3.6, React 19, TypeScript, Tailwind CSS 4, Supabase/PostgreSQL, the official OpenAI SDK, and `react-markdown`.
 
-## Local development
+## Local setup
 
-Use Node.js 20.9 or newer and npm. From the repository root:
+Requirements:
+
+- Node.js 20.9 or newer
+- A Supabase project or local Supabase stack
+- An OpenAI API key
+
+Install dependencies:
 
 ```bash
 npm ci
+```
+
+Apply migrations in order from `supabase/migrations/` using the Supabase CLI or dashboard SQL editor. Then copy `.env.example` to `.env.local` and fill in the server-side values:
+
+```bash
+cp .env.example .env.local
 npm run dev
 ```
 
-Open [localhost:3000](http://localhost:3000). Edit `app/page.tsx` to work on the homepage. No application environment variables or external services are currently required. The layout uses `next/font/google`, which fetches fonts during builds and may require network access.
+Open [localhost:3000](http://localhost:3000).
 
-Available checks and production commands:
+`SUPABASE_SERVICE_ROLE_KEY` and `OPENAI_API_KEY` must remain server-only. Never prefix them with `NEXT_PUBLIC_`. When Supabase variables are absent, the UI remains usable for development but conversations are in memory and will not survive refresh.
+
+## Validation
 
 ```bash
+npm test
 npm run lint
 npm run build
-npm run start # Run after a successful build
 ```
 
-There is no test script or CI configuration yet.
+The SQL integration scenario in `supabase/tests/persistent_conversation_graph_test.sql` is intended to run after both migrations against a disposable PostgreSQL/Supabase database. It covers a root, selected-text child, nested child, ordered messages, provenance, and completed generation records.
+
+The repeatable [deployment smoke test](docs/DEPLOYMENT_SMOKE_TEST.md) covers browser reconstruction, anonymous-owner isolation, and failed/interrupted generation behavior. Browser restart reconstruction was confirmed by the user on 2026-10-05; owner isolation and failed/interrupted generation scenarios also passed against an isolated local production app with hosted Supabase and a deterministic provider fixture.
 
 ## Repository structure
 
 ```text
-app/                 Route, root layout, global styles, and favicon
-public/              Starter SVG assets
-docs/               Canonical project documentation
-AGENTS.md            Agent workflow guidance and managed Next.js rules
-CLAUDE.md            Reference to AGENTS.md
-package.json         Dependencies and npm scripts
-package-lock.json    Locked dependency tree
+app/                    UI and server route handlers
+lib/                    Server-side Supabase persistence helpers
+supabase/migrations/    Ordered PostgreSQL migrations
+supabase/tests/         Transactional schema/integration checks
+tests/                  Focused conversation behavior tests
+docs/                   Product, architecture, decisions, progress, and research
 ```
 
-Framework and tooling configuration lives in `next.config.ts`, `tsconfig.json`, `eslint.config.mjs`, and `postcss.config.mjs`.
+## Current limitations
 
-## Project documentation
-
-- [Product](docs/PRODUCT.md): problem, intended experience, scope, and non-goals.
-- [Architecture](docs/ARCHITECTURE.md): current implementation and future possibilities.
-- [Roadmap](docs/ROADMAP.md): milestone status and next steps.
-- [Decisions](docs/DECISIONS.md): lightweight decision log.
-
-Keep changes scoped, run applicable checks, and update the relevant docs when behavior or direction changes. Detailed implementation tasks belong in GitHub Issues.
+- Browser ownership is an anonymous cookie, not authenticated identity. Clearing cookies loses access to that browser's graphs.
+- There is no cross-device sync, account recovery, conversation deletion UI, streaming, retry UI, or offline mode.
+- A configured Supabase project is required to verify browser refresh behavior end to end.
+- Context still resends bounded raw ancestor messages; summaries and retrieval are research directions, not current functionality.
