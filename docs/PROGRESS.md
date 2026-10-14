@@ -36,12 +36,14 @@ Sidequest supports root conversations, composer-created sidequests, nested branc
 
 - Ancestor messages are request context only; never copy them into visible child history.
 - Preserve branch-point and selected-text provenance when changing storage or context construction.
-- Keep `OPENAI_API_KEY` and `SUPABASE_SERVICE_ROLE_KEY` server-side only.
+- Keep `OPENAI_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SIDEQUEST_ACCESS_TOKEN`, and `UPSTASH_REDIS_REST_TOKEN` server-side only.
+- Chat must fail closed when the access token or Upstash rate-limit configuration is missing.
 - Do not present research directions in `docs/RESEARCH.md` as implemented features.
 
 ## Known limitations
 
-- Anonymous cookie ownership is browser-local identity. Clearing the cookie loses access, and there is no account recovery or cross-device sync.
+- Anonymous cookie ownership is browser-local identity. Clearing the cookie loses access, and there is no account recovery or cross-device sync. Model calls additionally require the deployment access cookie from D009.
+- Chat returns 503 until `SIDEQUEST_ACCESS_TOKEN` and the Upstash Redis REST variables are configured.
 - Persistence falls back to in-memory behavior when Supabase is unconfigured.
 - Requests are non-streaming and resend bounded raw ancestor context without token-budget management.
 - There is no user-facing retry/recovery flow for failed or interrupted generations.

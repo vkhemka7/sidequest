@@ -18,13 +18,14 @@ This document describes the current repository. Product intent lives in [Product
 | Location | Responsibility |
 | --- | --- |
 | `app/page.tsx` | Client `Home` component for `/`; local Sidequest prototype with conversation, selection-reference, composer, nested navigation, sidequest creation, parent navigation, and request-context behavior. |
-| `app/api/chat/route.ts` | Server-only POST endpoint; persists the generation lifecycle, calls OpenAI with `gpt-5.6`, and persists the assistant response. |
+| `app/api/chat/route.ts` | Server-only POST endpoint. Requires a valid access cookie, enforces body and output-token limits, rate-limits through Upstash, persists the generation lifecycle, calls OpenAI with `gpt-5.6`, and persists the assistant response. |
+| `app/api/access/route.ts` | Checks the access cookie and exchanges `SIDEQUEST_ACCESS_TOKEN` for an HttpOnly HMAC cookie. |
 | `app/api/conversations/route.ts` | Loads the browser owner's persisted graph or creates its first root conversation. |
-| `lib/` | Server-only Supabase client, anonymous browser ownership, row mapping, and persistence operations. |
+| `lib/` | Server-only Supabase client, anonymous browser ownership, chat access and rate-limit checks, row mapping, and persistence operations. |
 | `supabase/migrations/` | Phase 1 graph schema, integrity rules, RLS posture, and transactional write operations. |
 | `supabase/tests/` | Transactional PostgreSQL integration scenario for a root, selected child, nested child, and generation lifecycle. |
 | `app/layout.tsx` | `RootLayout`; HTML/body wrapper, Geist and Geist Mono via `next/font/google`, global CSS import, and Sidequest title and description metadata. |
-| `app/globals.css` | Tailwind import, theme variables, system dark-mode colors, and body styles. |
+| `app/globals.css` | Tailwind import, shared dark-only theme tokens, component and Markdown styles, focus states, and responsive rules. |
 | `app/favicon.ico` | Starter favicon. |
 | `docs/PROGRESS.md` | Current handoff state for future coding agents, including milestone, constraints, completed work, known issues, and next steps. |
 | `public/` | Five unused starter SVG assets. |
@@ -33,11 +34,11 @@ This document describes the current repository. Product intent lives in [Product
 | `eslint.config.mjs`, `postcss.config.mjs` | Lint and CSS processing configuration. |
 | `package.json`, `package-lock.json` | Scripts, dependency declarations, and resolved dependency tree. |
 
-There is no separate component library, application service layer, or additional application route.
+There is no separate component library or application service layer. Application routes are `/`, `/api/chat`, `/api/access`, and `/api/conversations`.
 
 ## Current rendering and data flow
 
-Next.js renders `app/page.tsx` inside the root layout for `/`. `app/layout.tsx` uses the default Server Component model. `app/page.tsx` declares `"use client"` because it owns local React state and click handlers for the branch-and-return prototype. The layout passes its `children` into the body, and the page renders prototype content in a two-column layout using Tailwind utilities and the Geist font. The shell uses a light color palette.
+Next.js renders `app/page.tsx` inside the root layout for `/`. `app/layout.tsx` uses the default Server Component model. `app/page.tsx` declares `"use client"` because it owns local React state and click handlers for the branch-and-return prototype. The layout passes its `children` into the body, and the page renders prototype content in a two-column layout using Tailwind utilities and the Geist font. The shell uses a dark-only graphite palette, soft white text, muted lavender branch/reference accents, and shared surface and focus tokens in `app/globals.css`. Existing component geometry and responsive breakpoints are retained.
 
 The client model has `Message` objects with `id`, `role`, and `content`, and `Conversation` objects with `id`, `graphId`, `title`, `messages`, `parentConversationId`, `parentMessageId`, and nullable `selectedText`. The app begins with an empty fallback root while persistence initializes. Sending a tangent with the composer’s secondary fork control creates a child containing that user question and makes it active. Without a selection, its parent IDs identify the active conversation and its most recent message. With an attached text reference, `parentMessageId` identifies the selected assistant message and `selectedText` preserves the full passage as branch-origin metadata. Empty conversations cannot branch. Titles use the trimmed question, truncated after 48 characters with an ellipsis. Parent navigation remains compact, and the sidebar recursively renders all descendants.
 
@@ -49,7 +50,9 @@ When a reference is attached, `requestMessagesForConversation` replaces only the
 
 Loading, errors, and assistant responses are keyed to the initiating conversation ID even when the user navigates elsewhere. Sending is disabled while the active conversation is loading. Assistant messages use `react-markdown` with scoped CSS for paragraphs, emphasis, code, lists, and links; user messages remain plain text. No raw HTML rendering or syntax-highlighting plugin is enabled.
 
-`app/api/chat/route.ts` validates incoming messages before converting them to Responses API message input. It currently calls the OpenAI Responses API with `gpt-5.6`, `store: false`, existing adaptive-depth instructions, and high text verbosity, then returns assistant text as JSON. The route reads `process.env.OPENAI_API_KEY` server-side and does not expose secrets to browser code.
+`app/api/chat/route.ts` validates incoming messages before converting them to Responses API message input. It calls the OpenAI Responses API with `gpt-5.6`, `store: false`, existing adaptive-depth instructions, high text verbosity, and `max_output_tokens` of 8192, then returns assistant text as JSON. The route reads `process.env.OPENAI_API_KEY` server-side and does not expose secrets to browser code.
+
+Before that call, the route requires a valid `sidequest-access` cookie. `POST /api/access` sets the cookie after a constant-time comparison with `SIDEQUEST_ACCESS_TOKEN`; the cookie stores an expiry and HMAC, not the token. Missing or invalid access-token configuration, or missing Upstash Redis REST credentials, fails closed with 503 and does not call OpenAI. Bodies over 256 KiB, more than 80 messages, or a message over 32,000 characters are rejected with 413. Authorized calls increment Upstash counters: 12 per IP and 60 globally per 10 minutes. Access attempts are limited to 8 per IP per 10 minutes. The client IP is the first address in `x-vercel-forwarded-for`, then `x-real-ip`. Localhost is the only host accepted without those headers. The anonymous owner cookie still scopes stored graphs and does not authorize model calls.
 
 When Supabase is configured, the page loads the browser owner's graph through `GET /api/conversations`; if none exists, it creates a root through `POST /api/conversations`. A year-long HttpOnly anonymous-owner cookie scopes reads and transactional mutations. Every send persists its user message, reference/branch provenance, and generation request before inference. OpenAI runs outside a database transaction. Success atomically appends the assistant message and completes the generation; failure records a failed generation while retaining the user message.
 

@@ -113,6 +113,11 @@ export default function Home() {
   >({});
   const [persistenceConfigured, setPersistenceConfigured] = useState(false);
   const [persistenceLoading, setPersistenceLoading] = useState(false);
+  const [accessState, setAccessState] = useState<
+    "unknown" | "granted" | "required" | "unavailable"
+  >("unknown");
+  const [accessInput, setAccessInput] = useState("");
+  const [accessError, setAccessError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -171,6 +176,28 @@ export default function Home() {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadAccess() {
+      try {
+        const response = await fetch("/api/access");
+        const data = (await response.json()) as { authorized?: boolean };
+        if (cancelled) return;
+        if (response.status === 503) setAccessState("unavailable");
+        else if (data.authorized === true) setAccessState("granted");
+        else setAccessState("required");
+      } catch {
+        if (!cancelled) setAccessState("unavailable");
+      }
+    }
+
+    void loadAccess();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const activeConversation =
     conversations.find((conversation) => conversation.id === activeConversationId) ??
     conversations[0];
@@ -186,6 +213,8 @@ export default function Home() {
     activeConversation.id,
   );
   const activeConversationError = conversationErrors[activeConversation.id];
+  const composerBlocked =
+    accessState === "required" || accessState === "unavailable";
 
   async function sendMessage(asSidequest = false) {
     const content = composerInput.trim();
@@ -195,7 +224,13 @@ export default function Home() {
         )
       : activeConversation.messages.at(-1);
 
-    if (!content || persistenceLoading || activeConversationIsLoading || (asSidequest && !branchPoint)) {
+    if (
+      !content ||
+      composerBlocked ||
+      persistenceLoading ||
+      activeConversationIsLoading ||
+      (asSidequest && !branchPoint)
+    ) {
       return;
     }
 
@@ -288,6 +323,8 @@ export default function Home() {
       });
 
       const data: unknown = await response.json();
+      if (response.status === 401) setAccessState("required");
+      if (response.status === 503) setAccessState("unavailable");
 
       if (!response.ok) {
         const errorMessage =
@@ -342,6 +379,35 @@ export default function Home() {
       setLoadingConversationIds((currentIds) =>
         currentIds.filter((id) => id !== requestConversationId),
       );
+    }
+  }
+
+  async function unlockAccess(event: { preventDefault(): void }) {
+    event.preventDefault();
+    const token = accessInput;
+    setAccessInput("");
+    setAccessError(null);
+    try {
+      const response = await fetch("/api/access", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token }),
+      });
+      if (response.status === 429) {
+        setAccessError("Too many attempts. Try again later.");
+        return;
+      }
+      if (!response.ok) {
+        setAccessError(
+          response.status === 503
+            ? "Chat is unavailable."
+            : "That access token was not accepted.",
+        );
+        return;
+      }
+      setAccessState("granted");
+    } catch {
+      setAccessError("Chat is unavailable.");
     }
   }
 
@@ -529,6 +595,38 @@ export default function Home() {
           </div>
 
           <div className="composer-area">
+            {accessState === "required" || accessState === "unavailable" ? (
+              <div className="conversation-column access-panel">
+                {accessState === "unavailable" ? (
+                  <p role="alert">Chat is unavailable.</p>
+                ) : (
+                  <form onSubmit={unlockAccess}>
+                    <p>Enter the deployment access token to send messages.</p>
+                    <div className="access-form">
+                      <label htmlFor="access-token" className="sr-only">
+                        Access token
+                      </label>
+                      <input
+                        id="access-token"
+                        type="password"
+                        name="access-token"
+                        autoComplete="current-password"
+                        value={accessInput}
+                        onChange={(event) => setAccessInput(event.target.value)}
+                      />
+                      <button type="submit" className="access-submit">
+                        Unlock
+                      </button>
+                    </div>
+                    {accessError ? (
+                      <p className="access-error" role="alert">
+                        {accessError}
+                      </p>
+                    ) : null}
+                  </form>
+                )}
+              </div>
+            ) : null}
             <form
               className="conversation-column composer"
               onSubmit={(event) => {
@@ -565,7 +663,7 @@ export default function Home() {
                   name="message"
                   placeholder="Message Sidequest..."
                   value={composerInput}
-              disabled={persistenceLoading || activeConversationIsLoading}
+              disabled={composerBlocked || persistenceLoading || activeConversationIsLoading}
                   onChange={(event) => setComposerInput(event.target.value)}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
@@ -581,7 +679,7 @@ export default function Home() {
                   type="button"
                   aria-label="Ask in a sidequest"
                   title="Ask in a sidequest"
-                  disabled={persistenceLoading || activeConversationIsLoading || !composerInput.trim() || activeConversation.messages.length === 0}
+                  disabled={composerBlocked || persistenceLoading || activeConversationIsLoading || !composerInput.trim() || activeConversation.messages.length === 0}
                   onClick={() => sendMessage(true)}
                   className="composer-button fork-button"
                 >
@@ -596,7 +694,7 @@ export default function Home() {
                   type="submit"
                   aria-label="Send"
                   title="Send"
-                  disabled={persistenceLoading || activeConversationIsLoading || !composerInput.trim()}
+                  disabled={composerBlocked || persistenceLoading || activeConversationIsLoading || !composerInput.trim()}
                   className="composer-button send-button"
                 >
                   <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

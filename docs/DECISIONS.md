@@ -65,3 +65,11 @@ A lightweight architecture decision log. Record meaningful choices when made; om
 - **Context:** Server routes use a Supabase service-role key and must not expose every graph before account authentication exists.
 - **Decision:** Assign each browser an HttpOnly, same-site UUID cookie and store it as `conversation_graphs.owner_id`. Server routes filter and validate graph reads and mutations with that owner. RLS remains enabled without client policies; only server-side transactional functions receive service-role execution grants.
 - **Reason:** This preserves refresh and browser-revisit persistence without exposing service credentials or building a premature account system. It is intentionally not cross-device identity or account recovery; Supabase Auth should replace it when accounts become a product requirement.
+
+## D009 — Gate model calls with a deployment access token and shared rate limits
+
+- **Date:** 2026-10-13
+- **Status:** Accepted
+- **Context:** The public Vercel deployment exposed `POST /api/chat` without authentication, request-size limits, output-token limits, or a rate limit that works across serverless instances. The anonymous owner cookie is issued to every browser and does not authorize model spend.
+- **Decision:** Require `SIDEQUEST_ACCESS_TOKEN` (at least 32 characters) and Upstash Redis REST credentials. `POST /api/access` compares the presented token in constant time and sets an HttpOnly HMAC cookie. `POST /api/chat` rejects missing configuration with 503, missing or invalid cookies with 401, bodies over 256 KiB or over the message caps with 413, and counts authorized calls in Redis (12 per IP and 60 globally per 10 minutes). Model requests set `max_output_tokens` to 8192. Client IP comes from `x-vercel-forwarded-for` or `x-real-ip`.
+- **Reason:** The check has to fail closed on Vercel, where in-memory counters do not survive across instances, and the access secret must never be bundled into client code. The owner cookie remains a persistence scope, not a model credential.
