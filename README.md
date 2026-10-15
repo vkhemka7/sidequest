@@ -43,7 +43,7 @@ npm run dev
 
 Open [localhost:3000](http://localhost:3000).
 
-`SUPABASE_SERVICE_ROLE_KEY`, `OPENAI_API_KEY`, `SIDEQUEST_ACCESS_TOKEN`, and `UPSTASH_REDIS_REST_TOKEN` must remain server-only. Never prefix them with `NEXT_PUBLIC_`. When Supabase variables are absent, the UI remains usable for development but conversations are in memory and will not survive refresh. Chat generation stays unavailable until the access token and Upstash variables are set. Open the app and enter `SIDEQUEST_ACCESS_TOKEN` once; the browser then keeps an HttpOnly cookie for seven days.
+`SUPABASE_SERVICE_ROLE_KEY`, `OPENAI_API_KEY`, `SIDEQUEST_ACCESS_TOKEN`, and `UPSTASH_REDIS_REST_TOKEN` must remain server-only. Never prefix them with `NEXT_PUBLIC_`. When Supabase variables are absent, the UI remains usable for development but conversations are in memory and will not survive refresh. Chat generation stays unavailable until the access token and Upstash variables are set. Open the app and enter the deployment access token on the unlock screen once; the browser then keeps an HttpOnly cookie for seven days. The token is not stored in the page.
 
 ## Vercel environment variables
 

@@ -73,3 +73,11 @@ A lightweight architecture decision log. Record meaningful choices when made; om
 - **Context:** The public Vercel deployment exposed `POST /api/chat` without authentication, request-size limits, output-token limits, or a rate limit that works across serverless instances. The anonymous owner cookie is issued to every browser and does not authorize model spend.
 - **Decision:** Require `SIDEQUEST_ACCESS_TOKEN` (at least 32 characters) and Upstash Redis REST credentials. `POST /api/access` compares the presented token in constant time and sets an HttpOnly HMAC cookie. `POST /api/chat` rejects missing configuration with 503, missing or invalid cookies with 401, bodies over 256 KiB or over the message caps with 413, and counts authorized calls in Redis (12 per IP and 60 globally per 10 minutes). Model requests set `max_output_tokens` to 8192. Client IP comes from `x-vercel-forwarded-for` or `x-real-ip`.
 - **Reason:** The check has to fail closed on Vercel, where in-memory counters do not survive across instances, and the access secret must never be bundled into client code. The owner cookie remains a persistence scope, not a model credential.
+
+## D010 — Show deployment access on a blocking screen
+
+- **Date:** 2026-10-14
+- **Status:** Accepted
+- **Context:** The conversation composer included an inline password field for `POST /api/access`.
+- **Decision:** When the access cookie is missing, or chat is unavailable, the client covers the shell with an access screen. A typed token is posted to the existing access route and removed from component state. The token is not written into client source, storage, or the URL.
+- **Reason:** The unlock step should be separate from the conversation, while authentication stays the HttpOnly HMAC cookie from D009.

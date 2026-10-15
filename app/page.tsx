@@ -215,6 +215,26 @@ export default function Home() {
   const activeConversationError = conversationErrors[activeConversation.id];
   const composerBlocked =
     accessState === "required" || accessState === "unavailable";
+  const lineage: Conversation[] = [];
+  {
+    const seen = new Set<string>();
+    let cursor: Conversation | undefined = activeConversation;
+    while (cursor && !seen.has(cursor.id)) {
+      lineage.unshift(cursor);
+      seen.add(cursor.id);
+      const parentId: string | null = cursor.parentConversationId;
+      cursor = parentId
+        ? conversations.find((conversation) => conversation.id === parentId)
+        : undefined;
+    }
+  }
+  const originMessage =
+    parentConversation?.messages.find(
+      (message) => message.id === activeConversation.parentMessageId,
+    ) ?? null;
+  const activeAncestorIds = new Set(
+    lineage.slice(0, -1).map((conversation) => conversation.id),
+  );
 
   async function sendMessage(asSidequest = false) {
     const content = composerInput.trim();
@@ -471,16 +491,26 @@ export default function Home() {
   function renderThread(conversation: Conversation): ReactNode {
     const children = conversations.filter((child) => child.parentConversationId === conversation.id);
     const isActive = activeConversationId === conversation.id;
+    const onActivePath = activeAncestorIds.has(conversation.id);
+    const isGenerating = loadingConversationIds.includes(conversation.id);
     return (
-      <li key={conversation.id}>
+      <li key={conversation.id} className="thread-node">
         <button
           type="button"
           aria-current={isActive ? "true" : undefined}
+          aria-label={conversation.title}
+          aria-busy={isGenerating || undefined}
           onClick={() => activateConversation(conversation.id)}
-          className={`thread-link ${isActive ? "thread-link-active" : ""}`}
+          className={`thread-link${isActive ? " thread-link-active" : ""}${onActivePath ? " thread-link-ancestor" : ""}`}
           title={conversation.title}
         >
-          {conversation.title}
+          <span className="thread-title-row">
+            <span className="thread-title">{conversation.title}</span>
+            {isGenerating ? <span className="thread-pulse" aria-hidden="true" /> : null}
+          </span>
+          {conversation.selectedText ? (
+            <span className="thread-origin">“{conversation.selectedText}”</span>
+          ) : null}
         </button>
         {children.length > 0 ? (
           <ol className="thread-children">
@@ -494,8 +524,10 @@ export default function Home() {
   const isEmpty = activeConversation.messages.length === 0;
 
   return (
+    <>
     <div
       className="chat-shell"
+      inert={composerBlocked ? true : undefined}
       onPointerDown={(event) => {
         if (!(event.target as HTMLElement).closest(".selection-action")) {
           setPendingSelection(null);
@@ -507,6 +539,7 @@ export default function Home() {
           type="button"
           className="selection-action"
           style={{ top: pendingSelection.top, left: pendingSelection.left }}
+          title="Attach this passage, then send it here or as a sidequest"
           onPointerDown={(event) => event.preventDefault()}
           onClick={attachPendingSelection}
         >
@@ -514,7 +547,15 @@ export default function Home() {
         </button>
       ) : null}
       <aside id="thread-sidebar" className={`sidebar ${sidebarOpen ? "sidebar-open" : ""}`} aria-label="Threads">
-        <h1 className="brand">Sidequest</h1>
+        <div className="sidebar-header">
+          <h1 className="brand">Sidequest</h1>
+          <p className="brand-tagline">Follow a tangent, then return.</p>
+          {persistenceLoading || persistenceConfigured ? (
+            <p className="sidebar-status" role="status">
+              {persistenceLoading ? "Restoring conversations" : "Saved in this browser"}
+            </p>
+          ) : null}
+        </div>
         <nav aria-labelledby="journey-heading">
           <h2 id="journey-heading" className="sidebar-label">Threads</h2>
           <ol className="thread-tree">{rootConversations.map(renderThread)}</ol>
@@ -526,107 +567,155 @@ export default function Home() {
           <button type="button" className="mobile-threads-toggle" aria-controls="thread-sidebar" aria-expanded={sidebarOpen} onClick={() => setSidebarOpen(!sidebarOpen)}>
             {sidebarOpen ? "Close threads" : "Threads"}
           </button>
-          {parentConversation ? (
-            <button
-              type="button"
-              onClick={returnToParent}
-              aria-label="Back to parent"
-              title={`Back to ${parentConversation.title}`}
-              className="parent-link"
-            >
-              <span aria-hidden="true">←</span>
-              <span className="truncate">{parentConversation.title}</span>
-            </button>
+          {lineage.length > 1 ? (
+            <nav className="ancestor-trail" aria-label="Parent conversations">
+              {lineage.slice(0, -1).map((conversation, index) => {
+                const isImmediateParent = conversation.id === parentConversation?.id;
+                return (
+                  <span key={conversation.id} className="ancestor-crumb">
+                    {index > 0 ? (
+                      <span className="ancestor-sep" aria-hidden="true">/</span>
+                    ) : null}
+                    <button
+                      type="button"
+                      className={isImmediateParent ? "parent-link" : "ancestor-link"}
+                      aria-label={isImmediateParent ? "Back to parent" : conversation.title}
+                      title={`Back to ${conversation.title}`}
+                      onClick={
+                        isImmediateParent
+                          ? returnToParent
+                          : () => activateConversation(conversation.id)
+                      }
+                    >
+                      {index === 0 ? <span aria-hidden="true">←</span> : null}
+                      <span className="truncate">{conversation.title}</span>
+                    </button>
+                  </span>
+                );
+              })}
+            </nav>
           ) : null}
-          <h2 id="conversation-heading" className="conversation-title">
-            {activeConversation.title}
-          </h2>
+          <div className="heading-block">
+            <p className="conversation-kicker">{parentConversation ? "Sidequest" : "Thread"}</p>
+            <h2 id="conversation-heading" className="conversation-title">
+              {activeConversation.title}
+            </h2>
+          </div>
         </header>
 
         <div className={`chat-content ${isEmpty ? "chat-content-empty" : ""}`}>
           <div className="message-scroll">
             <div className="conversation-column message-list">
+              {parentConversation ? (
+                <section className="origin-banner" aria-label="Where this sidequest started">
+                  <p className="origin-kicker">
+                    {activeConversation.selectedText
+                      ? "From a passage in "
+                      : "Sidequest from "}
+                    <span className="origin-parent">{parentConversation.title}</span>
+                  </p>
+                  {activeConversation.selectedText ? (
+                    <blockquote className="origin-quote">
+                      “{activeConversation.selectedText}”
+                    </blockquote>
+                  ) : originMessage ? (
+                    <p className="origin-context">
+                      Branched from “{truncateText(originMessage.content, 180)}”
+                    </p>
+                  ) : null}
+                </section>
+              ) : null}
               {activeConversation.messages.length > 0 ? (
                 activeConversation.messages.map((message) => {
                   const isUser = message.role === "user";
+                  const branches = conversations.filter(
+                    (conversation) =>
+                      conversation.parentConversationId === activeConversation.id &&
+                      conversation.parentMessageId === message.id,
+                  );
 
                   return (
-                    <article
+                    <div
                       key={message.id}
-                      className={isUser ? "message message-user" : "message message-assistant"}
+                      className={`message-block ${isUser ? "message-block-user" : "message-block-assistant"}`}
                     >
-                      {isUser ? (
-                        <p className="whitespace-pre-wrap break-words">{message.content}</p>
-                      ) : (
-                        <div
-                          className="assistant-markdown min-w-0 break-words"
-                          onMouseUp={(event) =>
-                            captureSelection(
-                              event,
-                              activeConversation.id,
-                              message.id,
-                            )
-                          }
-                        >
-                          <Markdown skipHtml>{message.content}</Markdown>
+                      <p className="message-role">{isUser ? "You" : "Assistant"}</p>
+                      {branches.length > 0 ? (
+                        <div className="message-branches">
+                          {branches.map((branch) => (
+                            <button
+                              key={branch.id}
+                              type="button"
+                              className="branch-chip"
+                              title={
+                                branch.selectedText
+                                  ? `Open sidequest from this passage: ${branch.title}`
+                                  : `Open sidequest: ${branch.title}`
+                              }
+                              onClick={() => activateConversation(branch.id)}
+                            >
+                              <span className="branch-chip-kicker">
+                                {branch.selectedText ? "From this passage" : "Sidequest"}
+                              </span>
+                              <span className="branch-chip-title">{branch.title}</span>
+                            </button>
+                          ))}
                         </div>
-                      )}
-                    </article>
+                      ) : null}
+                      <article
+                        className={isUser ? "message message-user" : "message message-assistant"}
+                      >
+                        {isUser ? (
+                          <p className="whitespace-pre-wrap break-words">{message.content}</p>
+                        ) : (
+                          <div
+                            className="assistant-markdown min-w-0 break-words"
+                            onMouseUp={(event) =>
+                              captureSelection(
+                                event,
+                                activeConversation.id,
+                                message.id,
+                              )
+                            }
+                          >
+                            <Markdown skipHtml>{message.content}</Markdown>
+                          </div>
+                        )}
+                      </article>
+                    </div>
                   );
                 })
               ) : (
                 <section className="empty-state">
-                  Where do you want to start?
+                  <p className="empty-kicker">Sidequest</p>
+                  <h3 className="empty-title">Where do you want to start?</h3>
+                  <p className="empty-guidance">
+                    Ask a question in this thread. When a tangent appears, select a passage or choose Sidequest. This conversation stays where you left it.
+                  </p>
                 </section>
               )}
 
               {activeConversationIsLoading ? (
-                <section role="status" className="loading-message">
-                  Thinking...
+                <section role="status" className="status-loading">
+                  <span className="loading-dots" aria-hidden="true">
+                    <span />
+                    <span />
+                    <span />
+                  </span>
+                  Thinking
                 </section>
               ) : null}
 
               {activeConversationError ? (
-                <section role="alert" className="error-message">
-                  {activeConversationError}
+                <section role="alert" className="status-error">
+                  <p className="status-error-label">Reply failed</p>
+                  <p>{activeConversationError}</p>
                 </section>
               ) : null}
             </div>
           </div>
 
           <div className="composer-area">
-            {accessState === "required" || accessState === "unavailable" ? (
-              <div className="conversation-column access-panel">
-                {accessState === "unavailable" ? (
-                  <p role="alert">Chat is unavailable.</p>
-                ) : (
-                  <form onSubmit={unlockAccess}>
-                    <p>Enter the deployment access token to send messages.</p>
-                    <div className="access-form">
-                      <label htmlFor="access-token" className="sr-only">
-                        Access token
-                      </label>
-                      <input
-                        id="access-token"
-                        type="password"
-                        name="access-token"
-                        autoComplete="current-password"
-                        value={accessInput}
-                        onChange={(event) => setAccessInput(event.target.value)}
-                      />
-                      <button type="submit" className="access-submit">
-                        Unlock
-                      </button>
-                    </div>
-                    {accessError ? (
-                      <p className="access-error" role="alert">
-                        {accessError}
-                      </p>
-                    ) : null}
-                  </form>
-                )}
-              </div>
-            ) : null}
             <form
               className="conversation-column composer"
               onSubmit={(event) => {
@@ -636,7 +725,7 @@ export default function Home() {
             >
               {textReference ? (
                 <div className="composer-reference">
-                  <span aria-hidden="true">↳</span>
+                  <span className="composer-reference-kicker">Asking about</span>
                   <span className="composer-reference-text">
                     “{textReference.selectedText}”
                   </span>
@@ -661,9 +750,9 @@ export default function Home() {
                   rows={1}
                   id="message"
                   name="message"
-                  placeholder="Message Sidequest..."
+                  placeholder="Ask a question..."
                   value={composerInput}
-              disabled={composerBlocked || persistenceLoading || activeConversationIsLoading}
+                  disabled={composerBlocked || persistenceLoading || activeConversationIsLoading}
                   onChange={(event) => setComposerInput(event.target.value)}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
@@ -678,22 +767,27 @@ export default function Home() {
                 <button
                   type="button"
                   aria-label="Ask in a sidequest"
-                  title="Ask in a sidequest"
+                  title={
+                    activeConversation.messages.length === 0
+                      ? "Send a message before starting a sidequest"
+                      : "Branch this question into its own thread"
+                  }
                   disabled={composerBlocked || persistenceLoading || activeConversationIsLoading || !composerInput.trim() || activeConversation.messages.length === 0}
                   onClick={() => sendMessage(true)}
                   className="composer-button fork-button"
                 >
-                  <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                  <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="6" cy="5" r="2" />
                     <circle cx="6" cy="19" r="2" />
                     <circle cx="18" cy="5" r="2" />
                     <path d="M6 7v10M18 7v2a4 4 0 0 1-4 4H6" />
                   </svg>
+                  <span>Sidequest</span>
                 </button>
                 <button
                   type="submit"
                   aria-label="Send"
-                  title="Send"
+                  title="Send in this thread"
                   disabled={composerBlocked || persistenceLoading || activeConversationIsLoading || !composerInput.trim()}
                   className="composer-button send-button"
                 >
@@ -707,5 +801,56 @@ export default function Home() {
         </div>
       </main>
     </div>
+    {accessState === "required" || accessState === "unavailable" ? (
+      <div className="access-gate">
+        <div
+          className="access-card"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="access-heading"
+        >
+          <p className="access-kicker">Sidequest</p>
+          {accessState === "unavailable" ? (
+            <>
+              <h2 id="access-heading" tabIndex={-1} autoFocus>
+                Chat is unavailable
+              </h2>
+              <p role="alert">
+                This deployment is missing the configuration required to answer questions.
+              </p>
+            </>
+          ) : (
+            <>
+              <h2 id="access-heading">Unlock this deployment</h2>
+              <p>
+                Enter the access token to start a conversation. It is checked on the server and is not saved in the page.
+              </p>
+              <form onSubmit={unlockAccess} className="access-form">
+                <label htmlFor="access-token">Access token</label>
+                <input
+                  id="access-token"
+                  type="password"
+                  name="access-token"
+                  autoComplete="current-password"
+                  autoFocus
+                  spellCheck={false}
+                  value={accessInput}
+                  onChange={(event) => setAccessInput(event.target.value)}
+                />
+                <button type="submit" className="access-submit">
+                  Unlock
+                </button>
+                {accessError ? (
+                  <p className="access-error" role="alert">
+                    {accessError}
+                  </p>
+                ) : null}
+              </form>
+            </>
+          )}
+        </div>
+      </div>
+    ) : null}
+    </>
   );
 }

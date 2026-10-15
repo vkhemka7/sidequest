@@ -2,7 +2,9 @@
 
 ## Current milestone
 
-Technical Phase 1 persistence is complete. On 2026-10-05, the user confirmed browser restart reconstruction of the complete graph, titles, messages, hierarchy, isolation, and parent navigation. The remaining anonymous-owner isolation and failed/interrupted generation smoke tests subsequently passed against an isolated local production app connected to the configured hosted Supabase database. The complete automated test suite, SQL integration scenario, lint, and production build passed. No application bug fixes or new features were needed.
+UI/UX polish is complete. The interface uses a blocking access screen, a nested thread sidebar, clearer message presentation, and visible branch origins. API routes, Supabase schema, security, rate limiting, persistence, and model-context construction are unchanged.
+
+Technical Phase 1 persistence remains complete. On 2026-10-05, the user confirmed browser restart reconstruction of the complete graph, titles, messages, hierarchy, isolation, and parent navigation. The remaining anonymous-owner isolation and failed/interrupted generation smoke tests subsequently passed against an isolated local production app connected to the configured hosted Supabase database. The complete automated test suite, SQL integration scenario, lint, and production build passed. No application bug fixes or new features were needed.
 
 ## Current implementation state
 
@@ -49,10 +51,17 @@ Sidequest supports root conversations, composer-created sidequests, nested branc
 - There is no user-facing retry/recovery flow for failed or interrupted generations.
 - Reading-position restoration, deletion UI, export, and syntax highlighting are not implemented.
 
+## UI polish checks
+
+- `npm test`: passed, 11 tests.
+- `npm run lint`: passed.
+- `npm run build`: passed.
+- Browser check on the local dev server: the access screen blocks the shell, a rejected token shows an error and clears the field, a valid token unlocks through the existing access route, the sidebar shows nested threads with passage quotes, sidequest chips and the origin banner identify where a branch started, and the mobile thread drawer opens and closes.
+
 ## Milestone boundary
 
-Persistence validation is complete. No next milestone was started, and no commit or push was made. Generation recovery UI, automatic reclamation, and portfolio release work remain outside this completed milestone.
+Persistence validation is complete. UI/UX polish is complete and limited to presentation of the existing interaction. Generation recovery UI, automatic reclamation, and portfolio release work remain outside it.
 
 ## Last updated
 
-2026-10-05
+2026-10-14
